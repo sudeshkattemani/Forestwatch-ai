@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: forestwatch-ai
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --workers 1 --threads 4
+    plan: free
