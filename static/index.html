@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ForestWatch AI</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#101a1f;--panel:#16252b;--line:#2a3f47;--text:#e4eee8;--dim:#8fa7a0;--red:#ef4444;--orange:#f59e0b;--green:#4ade80;--grey:#6b7b80}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:Manrope,system-ui,sans-serif}
+body{display:flex;flex-direction:column}
+header{display:flex;flex-wrap:wrap;align-items:center;gap:8px 28px;padding:10px 16px;border-bottom:1px solid var(--line);background:var(--panel)}
+h1{font-size:18px;font-weight:800;margin:0;margin-right:auto}
+.stat{display:flex;align-items:baseline;gap:6px;font-size:13px;color:var(--dim)}
+.stat b{font-size:22px;color:var(--text)}
+.stat.hot b{color:var(--red)}
+button{font:inherit;cursor:pointer}
+#snd{background:none;border:1px solid var(--line);color:var(--dim);padding:5px 10px;border-radius:6px;font-size:12px}
+#snd.on{color:var(--green);border-color:var(--green)}
+main{flex:1;display:flex;min-height:0}
+#map{flex:1;background:#0b1317}
+aside{width:360px;border-left:1px solid var(--line);background:var(--panel);overflow-y:auto}
+.alert{padding:12px 14px;border-bottom:1px solid var(--line);border-left:4px solid var(--grey);cursor:pointer}
+.alert.CHAINSAW,.alert.GUNSHOT{border-left-color:var(--red)}
+.alert.HUMAN{border-left-color:var(--orange)}
+.alert.ANIMAL{border-left-color:var(--green)}
+.alert.done{opacity:.5}
+.alert.fresh{animation:fresh 2s}
+@keyframes fresh{from{background:#3a1c1f}to{background:transparent}}
+.row{display:flex;justify-content:space-between;gap:8px}
+.threat{font-weight:800}
+.meta{font-size:12px;color:var(--dim);margin-top:2px}
+.alert img{width:100%;max-height:130px;object-fit:cover;border-radius:6px;margin-top:8px;display:block}
+.tag{display:inline-block;margin-top:6px;font-size:12px;font-weight:600;background:var(--bg);padding:2px 8px;border-radius:4px}
+.ack{margin-top:8px;background:var(--red);color:#fff;border:0;padding:7px 12px;border-radius:6px;font-weight:600;font-size:13px}
+.ack:focus-visible,#snd:focus-visible{outline:2px solid var(--text);outline-offset:2px}
+.empty{padding:24px 16px;color:var(--dim);font-size:14px}
+#flash{position:fixed;inset:0;pointer-events:none;box-shadow:inset 0 0 0 0 transparent}
+#flash.go{animation:flash 1.2s}
+@keyframes flash{0%,50%{box-shadow:inset 0 0 0 10px var(--red)}25%,75%{box-shadow:inset 0 0 0 0 transparent}100%{box-shadow:inset 0 0 0 0 transparent}}
+.pin{width:18px;height:18px;border-radius:50%;border:3px solid #fff;box-shadow:0 0 0 2px rgba(0,0,0,.4)}
+@media (max-width:760px){main{flex-direction:column}aside{width:100%;height:42%;border-left:0;border-top:1px solid var(--line)}h1{width:100%}}
+@media (prefers-reduced-motion:reduce){.fresh,#flash.go{animation:none}}
+</style>
+</head>
+<body>
+<header>
+  <h1>ForestWatch AI</h1>
+  <div class="stat"><b id="sToday">0</b>alerts today</div>
+  <div class="stat hot"><b id="sActive">0</b>active</div>
+  <div class="stat"><b id="sNodes">0</b>nodes online</div>
+  <button id="snd">Enable alert sound</button>
+</header>
+<main>
+  <div id="map"></div>
+  <aside id="list"><div class="empty">No alerts yet. The forest is quiet.</div></aside>
+</main>
+<div id="flash"></div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const API = "";  // same origin; set to "https://your-app.onrender.com" if hosting the page elsewhere
+const COLORS = {CHAINSAW:"#ef4444",GUNSHOT:"#ef4444",HUMAN:"#f59e0b",ANIMAL:"#4ade80"};
+const map = L.map("map").setView([12.97,77.59], 12);
+L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"&copy; OpenStreetMap contributors"}).addTo(map);
+const markers = {};
+let maxId = null, audio = null;
+
+function el(tag, cls, text){const e=document.createElement(tag); if(cls)e.className=cls; if(text!=null)e.textContent=text; return e}
+function ago(iso){const s=Math.max(0,(Date.now()-new Date(iso))/1000); if(s<60)return "just now"; if(s<3600)return Math.floor(s/60)+" min ago"; return new Date(iso).toLocaleString([], {dateStyle:"short",timeStyle:"short"})}
+
+document.getElementById("snd").onclick = e => {
+  audio = audio || new (window.AudioContext||window.webkitAudioContext)();
+  e.target.textContent = "Alert sound on"; e.target.classList.add("on"); beep();
+};
+function beep(){
+  if(!audio) return;
+  [0,0.25].forEach(t=>{const o=audio.createOscillator(),g=audio.createGain();
+    o.frequency.value=880; g.gain.value=0.15; o.connect(g); g.connect(audio.destination);
+    o.start(audio.currentTime+t); o.stop(audio.currentTime+t+0.18)});
+}
+function flash(){const f=document.getElementById("flash"); f.classList.remove("go"); void f.offsetWidth; f.classList.add("go")}
+
+async function ack(id){await fetch(${API}/alerts/${id}/ack,{method:"POST"}); refresh()}
+
+function render(alerts){
+  const list = document.getElementById("list");
+  list.replaceChildren();
+  if(!alerts.length){list.append(el("div","empty","No alerts yet. The forest is quiet.")); return}
+  alerts.forEach(a=>{
+    const d = el("div",alert ${a.threat}${a.ack?" done":""}${a.fresh?" fresh":""});
+    const r = el("div","row"); r.append(el("span","threat",a.threat), el("span","meta",ago(a.time)));
+    d.append(r, el("div","meta",${a.node} · ${a.lat.toFixed(4)}, ${a.lng.toFixed(4)}));
+    if(a.image_url){const i=el("img"); i.src=a.image_url; i.alt=a.label||"camera capture"; i.loading="lazy"; d.append(i)}
+    if(a.label) d.append(el("span","tag",YOLOv8: ${a.label}));
+    if(a.ack) d.append(el("div","meta","Ranger dispatched"));
+    else {const b=el("button","ack","Acknowledge / Ranger dispatched"); b.onclick=e=>{e.stopPropagation(); ack(a.id)}; d.append(b)}
+    d.onclick = () => map.flyTo([a.lat,a.lng],16);
+    list.append(d);
+  });
+}
+
+function renderNodes(nodes){
+  nodes.forEach(n=>{
+    if(n.lat==null) return;
+    const color = !n.online ? "#6b7b80" : (COLORS[n.last_threat] || "#6b7b80");
+    const icon = L.divIcon({className:"",html:<div class="pin" style="background:${color}"></div>,iconSize:[18,18]});
+    const tip = ${n.node}${n.online?"":" (offline)"}${n.last_threat?" · "+n.last_threat:""}${n.battery!=null?" · battery "+n.battery+"%":""};
+    if(markers[n.node]) markers[n.node].setLatLng([n.lat,n.lng]).setIcon(icon).setTooltipContent(tip);
+    else markers[n.node] = L.marker([n.lat,n.lng],{icon}).bindTooltip(tip).addTo(map);
+  });
+  document.getElementById("sNodes").textContent = nodes.filter(n=>n.online).length;
+}
+
+let firstFit = true;
+async function refresh(){
+  try{
+    const [alerts, nodes] = await Promise.all([fetch(API+"/alerts").then(r=>r.json()), fetch(API+"/nodes").then(r=>r.json())]);
+    const top = alerts.length ? alerts[0].id : 0;
+    if(maxId!==null && top>maxId){
+      alerts.forEach(a=>{if(a.id>maxId)a.fresh=true}); beep(); flash();
+    }
+    maxId = top;
+    const today = new Date().toDateString();
+    document.getElementById("sToday").textContent = alerts.filter(a=>new Date(a.time).toDateString()===today).length;
+    document.getElementById("sActive").textContent = alerts.filter(a=>!a.ack).length;
+    render(alerts); renderNodes(nodes);
+    if(firstFit && nodes.some(n=>n.lat!=null)){
+      map.fitBounds(L.latLngBounds(nodes.filter(n=>n.lat!=null).map(n=>[n.lat,n.lng])).pad(0.4),{maxZoom:15}); firstFit=false;
+    }
+  }catch(e){console.warn("Backend unreachable", e)}
+}
+refresh(); setInterval(refresh, 3000);
+</script>
+</body>
+</html>
