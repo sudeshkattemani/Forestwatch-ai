@@ -82,18 +82,18 @@ function beep(){
 }
 function flash(){const f=document.getElementById("flash"); f.classList.remove("go"); void f.offsetWidth; f.classList.add("go")}
 
-async function ack(id){await fetch(${API}/alerts/${id}/ack,{method:"POST"}); refresh()}
+async function ack(id){await fetch(`${API}/alerts/${id}/ack`,{method:"POST"}); refresh()}
 
 function render(alerts){
   const list = document.getElementById("list");
   list.replaceChildren();
   if(!alerts.length){list.append(el("div","empty","No alerts yet. The forest is quiet.")); return}
   alerts.forEach(a=>{
-    const d = el("div",alert ${a.threat}${a.ack?" done":""}${a.fresh?" fresh":""});
+    const d = el("div",`alert ${a.threat}${a.ack?" done":""}${a.fresh?" fresh":""}`);
     const r = el("div","row"); r.append(el("span","threat",a.threat), el("span","meta",ago(a.time)));
-    d.append(r, el("div","meta",${a.node} · ${a.lat.toFixed(4)}, ${a.lng.toFixed(4)}));
+    d.append(r, el("div","meta",`${a.node} · ${a.lat.toFixed(4)}, ${a.lng.toFixed(4)}`));
     if(a.image_url){const i=el("img"); i.src=a.image_url; i.alt=a.label||"camera capture"; i.loading="lazy"; d.append(i)}
-    if(a.label) d.append(el("span","tag",YOLOv8: ${a.label}));
+    if(a.label) d.append(el("span","tag",`YOLOv8: ${a.label}`));
     if(a.ack) d.append(el("div","meta","Ranger dispatched"));
     else {const b=el("button","ack","Acknowledge / Ranger dispatched"); b.onclick=e=>{e.stopPropagation(); ack(a.id)}; d.append(b)}
     d.onclick = () => map.flyTo([a.lat,a.lng],16);
@@ -105,8 +105,8 @@ function renderNodes(nodes){
   nodes.forEach(n=>{
     if(n.lat==null) return;
     const color = !n.online ? "#6b7b80" : (COLORS[n.last_threat] || "#6b7b80");
-    const icon = L.divIcon({className:"",html:<div class="pin" style="background:${color}"></div>,iconSize:[18,18]});
-    const tip = ${n.node}${n.online?"":" (offline)"}${n.last_threat?" · "+n.last_threat:""}${n.battery!=null?" · battery "+n.battery+"%":""};
+    const icon = L.divIcon({className:"",html:`<div class="pin" style="background:${color}"></div>`,iconSize:[18,18]});
+    const tip = `${n.node}${n.online?"":" (offline)"}${n.last_threat?" · "+n.last_threat:""}${n.battery!=null?" · battery "+n.battery+"%":""}`;
     if(markers[n.node]) markers[n.node].setLatLng([n.lat,n.lng]).setIcon(icon).setTooltipContent(tip);
     else markers[n.node] = L.marker([n.lat,n.lng],{icon}).bindTooltip(tip).addTo(map);
   });
